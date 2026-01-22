@@ -34,22 +34,22 @@ export default function RecentActivity({
   // Combine and sort transactions
   const transactions: Transaction[] = [
     ...bakiEntries.map(b => ({
-      id: b.id,
+      id: String(b.id),
       type: "baki" as const,
-      amount: b.amount,
-      customerName: b.customerName,
+      amount: typeof b.amount === 'string' ? parseFloat(b.amount) : b.amount,
+      customerName: b.customer?.name || b.customer?.phone || 'গ্রাহক',
       description: b.description,
       status: b.status,
-      createdAt: b.createdAt,
+      createdAt: new Date(b.createdAt),
     })),
     ...payments.map(p => ({
-      id: p.id,
+      id: String(p.id),
       type: "payment" as const,
-      amount: p.amount,
-      customerName: p.customerName,
+      amount: typeof p.amount === 'string' ? parseFloat(p.amount) : p.amount,
+      customerName: p.customer?.name || p.customer?.phone || 'গ্রাহক',
       description: undefined,
       status: p.status,
-      createdAt: p.createdAt,
+      createdAt: new Date(p.createdAt),
     })),
   ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 

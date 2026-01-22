@@ -24,7 +24,7 @@ export default function BottomNav() {
   const { currentRole, notifications } = useApp();
   const unreadCount = notifications.filter(n => !n.read).length;
 
-  const navItems = currentRole === "dokandar" ? dokandarNavItems : customerNavItems;
+  const navItems = currentRole === "shop_owner" ? dokandarNavItems : customerNavItems;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-card/95 backdrop-blur-lg border-t border-border/50 md:hidden safe-area-bottom">

@@ -2,7 +2,6 @@
 
 import DashboardHeader from "@/components/shared/DashboardHeader";
 import BottomNav from "@/components/shared/BottomNav";
-import RoleSwitcher from "@/components/shared/RoleSwitcher";
 import { useApp } from "@/contexts/AppContext";
 import { formatRelativeTime } from "@/lib/formatters";
 import { Bell, BellOff, Plus, CreditCard, Info, Check, Trash2 } from "lucide-react";
@@ -39,7 +38,6 @@ export default function NotificationsPage() {
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <DashboardHeader />
-      <RoleSwitcher />
       
       <main className="container py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Header */}
@@ -79,7 +77,7 @@ export default function NotificationsPage() {
                   "p-3 sm:p-4 flex gap-3 sm:gap-4 cursor-pointer transition-colors active:bg-secondary/50",
                   !notification.read && "bg-primary/5"
                 )}
-                onClick={() => markNotificationRead(notification.id)}
+                onClick={() => markNotificationRead?.(notification.id)}
               >
                 <div className={cn(
                   "w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center flex-shrink-0",
@@ -103,7 +101,7 @@ export default function NotificationsPage() {
                     {notification.message}
                   </p>
                   <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1">
-                    {formatRelativeTime(notification.createdAt)}
+                    {formatRelativeTime(new Date(notification.createdAt))}
                   </p>
                 </div>
               </div>

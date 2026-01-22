@@ -1,390 +1,610 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import axiosInstance from "@/lib/axios";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 // Types
-export type UserRole = "dokandar" | "customer";
-export type EntryStatus = "pending" | "confirmed" | "rejected";
-export type PaymentMethod = "cash" | "bkash" | "nagad";
+export type UserRole = "shop_owner" | "customer";
 
-export interface Customer {
-  id: string;
+export interface User {
+  id: number;
   phone: string;
-  name: string;
-  balance: number;
-  lastTransaction?: Date;
-  createdAt: Date;
-}
-
-export interface BakiEntry {
-  id: string;
-  customerId: string;
-  customerName: string;
-  amount: number;
-  description?: string;
-  status: EntryStatus;
-  createdAt: Date;
-  confirmedAt?: Date;
-}
-
-export interface PaymentEntry {
-  id: string;
-  customerId: string;
-  customerName: string;
-  amount: number;
-  method: PaymentMethod;
-  status: EntryStatus;
-  createdAt: Date;
-  confirmedAt?: Date;
-}
-
-export interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: "baki" | "payment" | "info";
-  read: boolean;
-  createdAt: Date;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+  date_joined: string;
 }
 
 export interface Shop {
-  id: string;
+  id: number;
   name: string;
-  phone: string;
+  shopName?: string;
+  phone_number?: string;
   address?: string;
+  created_at: string;
+  updated_at: string;
 }
 
-export interface UserProfile {
-  id: string;
-  name: string;
+export interface Customer {
+  id: number;
   phone: string;
-  role: UserRole;
+  name?: string;
+  balance: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type EntryStatus = "pending" | "confirmed" | "rejected";
+
+export interface BakiEntry {
+  id: number;
+  customer: Customer;
+  customerId?: number;
+  amount: number;
+  date: string;
+  description?: string;
+  status: EntryStatus;
+  rejected_reason?: string;
+  createdAt: string;
+  confirmedAt?: string;
+}
+
+export interface PaymentEntry {
+  id: number;
+  customer: Customer;
+  customerId?: number;
+  amount: number;
+  date: string;
+  method: "cash" | "bkash" | "nagad";
+  status: EntryStatus;
+  rejected_reason?: string;
+  createdAt: string;
+  confirmedAt?: string;
+}
+
+export interface CustomerShop {
+  shop_id: number;
+  shop_name: string;
+  shop_type: string;
+  customer_id: number;
+  customer_name?: string;
+  balance: number;
+}
+
+export interface Notification {
+  id: number;
+  type: string;
+  title: string;
+  message: string;
+  read: boolean;
+  createdAt: string;
 }
 
 interface AppContextType {
   // Authentication state
   isAuthenticated: boolean;
-  hasShop: boolean;
-  userProfile: UserProfile | null;
+  user: User | null;
   shop: Shop | null;
+  customerShops: CustomerShop[];
+  userType: UserRole | null;
+  isLoading: boolean;
   
-  // Role switching (for demo)
-  currentRole: UserRole;
-  switchRole: (role: UserRole) => void;
-  
-  // Data
+  // Shop owner data
   customers: Customer[];
   bakiEntries: BakiEntry[];
   payments: PaymentEntry[];
-  notifications: Notification[];
-  
-  // Subscription
   isSubscribed: boolean;
   trialDaysLeft: number;
   
+  // Computed
+  currentRole: UserRole; // For backward compatibility with existing components
+  userProfile: User | null; // Alias for user
+  notifications: Notification[]; // Notifications list
+  
   // Actions
-  login: (phone: string, password: string) => void;
-  signup: (phone: string, password: string, name: string, role: UserRole) => void;
+  login: (phone: string, password: string) => Promise<UserRole>;
+  register: (phone: string, password: string, firstName?: string, lastName?: string, userType?: UserRole) => Promise<UserRole>;
   logout: () => void;
-  setupShop: (name: string, phone: string, address?: string) => void;
-  
-  // Customer actions
-  addCustomer: (phone: string, name: string) => void;
-  
-  // Baki actions
-  addBaki: (customerId: string, amount: number, description?: string) => void;
-  confirmBaki: (id: string) => void;
-  rejectBaki: (id: string) => void;
-  
-  // Payment actions
-  addPayment: (customerId: string, amount: number, method: PaymentMethod) => void;
-  confirmPayment: (id: string) => void;
-  rejectPayment: (id: string) => void;
-  
-  // Notification actions
-  markNotificationRead: (id: string) => void;
-  clearAllNotifications: () => void;
-  
-  // Subscription
-  subscribe: () => void;
+  refreshUser: () => Promise<void>;
+  refreshShop: () => Promise<void>;
+  refreshCustomerShops: () => Promise<void>;
+  refreshCustomers: () => Promise<void>;
+  refreshTransactions: () => Promise<void>;
+  setupShop: (shopName: string, phone: string, address?: string) => Promise<void>;
+  addCustomer: (phone: string, name?: string) => Promise<void>;
+  addBaki: (customerId: string, amount: number, description?: string) => Promise<void>;
+  addPayment: (customerId: string, amount: number, method: "cash" | "bkash" | "nagad") => Promise<void>;
+  switchRole?: (role: UserRole) => void; // For demo purposes only
+  markNotificationRead?: (id: number) => void;
+  clearAllNotifications?: () => void;
 }
-
-// Dummy data
-const DUMMY_CUSTOMERS: Customer[] = [
-  { id: "c1", phone: "01712345678", name: "আব্দুল করিম", balance: 2500, lastTransaction: new Date(2026, 0, 14), createdAt: new Date(2025, 10, 1) },
-  { id: "c2", phone: "01812345678", name: "মোহাম্মদ হাসান", balance: 1800, lastTransaction: new Date(2026, 0, 13), createdAt: new Date(2025, 10, 5) },
-  { id: "c3", phone: "01912345678", name: "ফাতেমা বেগম", balance: 3200, lastTransaction: new Date(2026, 0, 12), createdAt: new Date(2025, 10, 10) },
-  { id: "c4", phone: "01612345678", name: "রহিম উদ্দিন", balance: 950, lastTransaction: new Date(2026, 0, 11), createdAt: new Date(2025, 11, 1) },
-  { id: "c5", phone: "01512345678", name: "সালমা খাতুন", balance: 4100, lastTransaction: new Date(2026, 0, 10), createdAt: new Date(2025, 11, 15) },
-];
-
-const DUMMY_BAKI_ENTRIES: BakiEntry[] = [
-  { id: "b1", customerId: "c1", customerName: "আব্দুল করিম", amount: 500, description: "চাল ৫ কেজি", status: "pending", createdAt: new Date(2026, 0, 15) },
-  { id: "b2", customerId: "c2", customerName: "মোহাম্মদ হাসান", amount: 300, description: "তেল ২ লিটার", status: "confirmed", createdAt: new Date(2026, 0, 14), confirmedAt: new Date(2026, 0, 14) },
-  { id: "b3", customerId: "c3", customerName: "ফাতেমা বেগম", amount: 1200, description: "মাসিক বাজার", status: "pending", createdAt: new Date(2026, 0, 13) },
-  { id: "b4", customerId: "c1", customerName: "আব্দুল করিম", amount: 800, description: "চিনি, ডাল", status: "confirmed", createdAt: new Date(2026, 0, 12), confirmedAt: new Date(2026, 0, 12) },
-  { id: "b5", customerId: "c4", customerName: "রহিম উদ্দিন", amount: 450, description: "দুধ, ডিম", status: "rejected", createdAt: new Date(2026, 0, 11) },
-];
-
-const DUMMY_PAYMENTS: PaymentEntry[] = [
-  { id: "p1", customerId: "c2", customerName: "মোহাম্মদ হাসান", amount: 1000, method: "bkash", status: "pending", createdAt: new Date(2026, 0, 15) },
-  { id: "p2", customerId: "c3", customerName: "ফাতেমা বেগম", amount: 500, method: "cash", status: "confirmed", createdAt: new Date(2026, 0, 14), confirmedAt: new Date(2026, 0, 14) },
-  { id: "p3", customerId: "c1", customerName: "আব্দুল করিম", amount: 800, method: "nagad", status: "confirmed", createdAt: new Date(2026, 0, 13), confirmedAt: new Date(2026, 0, 13) },
-];
-
-const DUMMY_NOTIFICATIONS: Notification[] = [
-  { id: "n1", title: "নতুন বাকি", message: "আব্দুল করিম এর ৳৫০০ বাকি পেন্ডিং", type: "baki", read: false, createdAt: new Date(2026, 0, 15) },
-  { id: "n2", title: "পেমেন্ট পেন্ডিং", message: "মোহাম্মদ হাসান ৳১০০০ পেমেন্ট করেছে", type: "payment", read: false, createdAt: new Date(2026, 0, 15) },
-  { id: "n3", title: "বাকি নিশ্চিত", message: "মোহাম্মদ হাসান এর ৳৩০০ বাকি নিশ্চিত হয়েছে", type: "baki", read: true, createdAt: new Date(2026, 0, 14) },
-];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  // Auth state
+  const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [hasShop, setHasShop] = useState(false);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [shop, setShop] = useState<Shop | null>(null);
-  const [currentRole, setCurrentRole] = useState<UserRole>("dokandar");
+  const [customerShops, setCustomerShops] = useState<CustomerShop[]>([]);
+  const [userType, setUserType] = useState<UserRole | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Data state
-  const [customers, setCustomers] = useState<Customer[]>(DUMMY_CUSTOMERS);
-  const [bakiEntries, setBakiEntries] = useState<BakiEntry[]>(DUMMY_BAKI_ENTRIES);
-  const [payments, setPayments] = useState<PaymentEntry[]>(DUMMY_PAYMENTS);
-  const [notifications, setNotifications] = useState<Notification[]>(DUMMY_NOTIFICATIONS);
-  
-  // Subscription state
+  // Shop owner data
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [bakiEntries, setBakiEntries] = useState<BakiEntry[]>([]);
+  const [payments, setPayments] = useState<PaymentEntry[]>([]);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const trialDaysLeft = 25;
+  const [trialDaysLeft, setTrialDaysLeft] = useState(30);
   
-  // Auth actions
-  const login = useCallback((phone: string, _password: string) => {
-    setIsAuthenticated(true);
-    setUserProfile({
-      id: "u1",
-      name: currentRole === "dokandar" ? "রহিম স্টোর" : "আব্দুল করিম",
-      phone,
-      role: currentRole,
-    });
-    if (currentRole === "dokandar") {
-      setHasShop(true);
-      setShop({
-        id: "s1",
-        name: "রহিম স্টোর",
+  // Computed currentRole for backward compatibility
+  const currentRole: UserRole = userType || (shop ? 'shop_owner' : 'customer');
+  const userProfile = user; // Alias for backward compatibility
+
+  // Fetch customers for shop owners
+  const refreshCustomers = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/api/customers/");
+      setCustomers(response.data.customers || []);
+    } catch (error) {
+      setCustomers([]);
+    }
+  }, []);
+
+  // Fetch transactions for shop owners
+  const refreshTransactions = useCallback(async () => {
+    try {
+      const ledgerResponse = await axiosInstance.get("/api/transactions/ledger/shop/");
+      const ledger = ledgerResponse.data;
+      
+      // Backend returns credits and payments arrays
+      const credits = ledger.credits || [];
+      const payments = ledger.payments || [];
+      
+      // Transform credits to BakiEntry format
+      const transformedCredits: BakiEntry[] = credits.map((entry: any) => ({
+        id: entry.id,
+        customer: entry.customer,
+        customerId: entry.customer?.id || entry.customer_id,
+        amount: parseFloat(entry.amount) || 0,
+        date: entry.date,
+        description: entry.description || '',
+        status: entry.status || 'pending',
+        rejected_reason: entry.rejected_reason,
+        createdAt: entry.createdAt || entry.created_at,
+        confirmedAt: entry.confirmedAt || entry.confirmed_at,
+      }));
+      
+      // Transform payments to PaymentEntry format
+      const transformedPayments: PaymentEntry[] = payments.map((entry: any) => ({
+        id: entry.id,
+        customer: entry.customer,
+        customerId: entry.customer?.id || entry.customer_id,
+        amount: parseFloat(entry.amount) || 0,
+        date: entry.date,
+        method: entry.method || entry.payment_method || 'cash',
+        status: entry.status || 'pending',
+        rejected_reason: entry.rejected_reason,
+        createdAt: entry.createdAt || entry.created_at,
+        confirmedAt: entry.confirmedAt || entry.confirmed_at,
+      }));
+      
+      setBakiEntries(transformedCredits);
+      setPayments(transformedPayments);
+    } catch (error: any) {
+      console.error("Failed to refresh transactions:", error);
+      console.error("Error response:", error.response?.data);
+      setBakiEntries([]);
+      setPayments([]);
+    }
+  }, []);
+
+  // Check authentication on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = localStorage.getItem("access_token");
+        if (token) {
+          const response = await axiosInstance.get("/api/auth/profile/");
+          const userData = response.data;
+          setUser(userData);
+          setIsAuthenticated(true);
+          
+          // Get userType from profile response
+          const detectedUserType: UserRole = userData.userType || 'shop_owner';
+          setUserType(detectedUserType);
+          
+          // Fetch data based on userType - don't call /api/shops/ for customers
+          if (detectedUserType === 'shop_owner') {
+            // For shop owners, fetch shop data
+            try {
+              const shopResponse = await axiosInstance.get("/api/shops/");
+              setShop(shopResponse.data);
+              setCustomerShops([]);
+              // Fetch shop owner data
+              await refreshCustomers();
+              await refreshTransactions();
+            } catch (error) {
+              setShop(null);
+              setCustomers([]);
+              setBakiEntries([]);
+              setPayments([]);
+            }
+          } else if (detectedUserType === 'customer') {
+            // For customers, fetch customer shops (don't call /api/shops/)
+            setShop(null);
+            setCustomers([]);
+            setBakiEntries([]);
+            setPayments([]);
+            try {
+              const customerShopsResponse = await axiosInstance.get("/api/auth/customer-shops/");
+              const shops = customerShopsResponse.data.shops || [];
+              setCustomerShops(shops);
+            } catch (error) {
+              setCustomerShops([]);
+            }
+          }
+        }
+      } catch (error) {
+        // Not authenticated
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        setIsAuthenticated(false);
+        setUser(null);
+        setShop(null);
+        setCustomerShops([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, [refreshCustomers, refreshTransactions]);
+
+  const login = useCallback(async (phone: string, password: string) => {
+    try {
+      const response = await axiosInstance.post("/api/auth/login/", { phone, password });
+      const { user: userData, tokens, userType } = response.data;
+      
+      localStorage.setItem("access_token", tokens.access);
+      localStorage.setItem("refresh_token", tokens.refresh);
+      
+      setUser(userData);
+      setIsAuthenticated(true);
+      
+      // Store userType from backend response
+      const detectedUserType = userType || 'shop_owner';
+      setUserType(detectedUserType);
+      
+      // Intelligently fetch data based on userType from backend
+      if (detectedUserType === 'shop_owner') {
+        // Try to fetch shop (for shop owners)
+        try {
+          const shopResponse = await axiosInstance.get("/api/shops/");
+          setShop(shopResponse.data);
+          // Fetch shop owner data
+          await refreshCustomers();
+          await refreshTransactions();
+        } catch (error) {
+          setShop(null);
+          setCustomers([]);
+          setBakiEntries([]);
+          setPayments([]);
+        }
+        setCustomerShops([]);
+      } else if (detectedUserType === 'customer') {
+        // For customers, shop is null (they see shops via customer-shops endpoint)
+        setShop(null);
+        setCustomers([]);
+        setBakiEntries([]);
+        setPayments([]);
+        // Fetch customer shops
+        try {
+          const customerShopsResponse = await axiosInstance.get("/api/auth/customer-shops/");
+          setCustomerShops(customerShopsResponse.data.shops || []);
+        } catch (error) {
+          setCustomerShops([]);
+        }
+      }
+      
+      toast.success("লগইন সফল!", {
+        description: "স্বাগতম!",
+      });
+      
+      return detectedUserType;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "লগইন ব্যর্থ হয়েছে";
+      toast.error("লগইন ব্যর্থ", {
+        description: errorMessage,
+      });
+      throw error;
+    }
+  }, []);
+
+  const register = useCallback(async (phone: string, password: string, firstName?: string, lastName?: string, userType: UserRole | "dokandar" = "shop_owner") => {
+    try {
+      // Normalize userType: convert 'dokandar' to 'shop_owner' for backward compatibility
+      const normalizedUserType: UserRole = (userType === 'dokandar' || userType === 'shop_owner') ? 'shop_owner' : userType;
+      
+      const response = await axiosInstance.post("/api/auth/register/", {
         phone,
-        address: "মিরপুর, ঢাকা",
+        password,
+        first_name: firstName,
+        last_name: lastName,
+        userType: normalizedUserType,
       });
-    }
-  }, [currentRole]);
-  
-  const signup = useCallback((phone: string, _password: string, name: string, role: UserRole) => {
-    setIsAuthenticated(true);
-    setCurrentRole(role);
-    setUserProfile({
-      id: "u1",
-      name,
-      phone,
-      role,
-    });
-    if (role === "dokandar") {
-      setHasShop(false);
+      const { user: userData, tokens, userType: registeredUserType } = response.data;
+      
+      localStorage.setItem("access_token", tokens.access);
+      localStorage.setItem("refresh_token", tokens.refresh);
+      
+      setUser(userData);
+      setIsAuthenticated(true);
+      
+      // Store userType from backend response
+      const detectedUserType = registeredUserType || normalizedUserType || 'shop_owner';
+      setUserType(detectedUserType);
+      
+      // Intelligently fetch data based on userType from backend
+      if (detectedUserType === "shop_owner") {
+        // For shop owners, check if shop exists
+        setShop(null);
+        setCustomers([]);
+        setBakiEntries([]);
+        setPayments([]);
+        setCustomerShops([]);
+        try {
+          const shopResponse = await axiosInstance.get("/api/shops/");
+          setShop(shopResponse.data);
+          // If shop exists, fetch shop owner data
+          if (shopResponse.data) {
+            await refreshCustomers();
+            await refreshTransactions();
+          }
+        } catch (error) {
+          // Shop doesn't exist yet, that's okay - they'll create it
+          setShop(null);
+        }
+      } else {
+        // For customers, shop is null (they see shops via customer-shops endpoint)
+        setShop(null);
+        setCustomers([]);
+        setBakiEntries([]);
+        setPayments([]);
+        // Fetch customer shops - this links existing Customer records
+        // Add a small delay to ensure backend transaction is complete
+        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+          const customerShopsResponse = await axiosInstance.get("/api/auth/customer-shops/");
+          const shops = customerShopsResponse.data.shops || customerShopsResponse.data || [];
+          setCustomerShops(Array.isArray(shops) ? shops : []);
+        } catch (error) {
+          console.error("Failed to fetch customer shops:", error);
+          setCustomerShops([]);
+        }
+      }
+      
+      toast.success("রেজিস্ট্রেশন সফল!", {
+        description: "আপনার একাউন্ট তৈরি হয়েছে",
+      });
+      
+      return detectedUserType;
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "রেজিস্ট্রেশন ব্যর্থ হয়েছে";
+      toast.error("রেজিস্ট্রেশন ব্যর্থ", {
+        description: errorMessage,
+      });
+      throw error;
     }
   }, []);
-  
+
+  const refreshShop = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/api/shops/");
+      setShop(response.data);
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        setShop(null);
+      }
+      throw error;
+    }
+  }, []);
+
+  const setupShop = useCallback(async (shopName: string, phone: string, address?: string) => {
+    try {
+      const response = await axiosInstance.post("/api/shops/", {
+        shopName,
+        phone,
+        address: address || '',
+      });
+      
+      // Handle response - backend returns { message, shop }
+      if (response.data && response.data.shop) {
+        setShop(response.data.shop);
+        // Refresh shop data to ensure consistency
+        try {
+          await refreshShop();
+        } catch (refreshError) {
+          // If refresh fails, that's okay - we already have the shop data
+          console.warn('Failed to refresh shop after creation:', refreshError);
+        }
+      } else {
+        console.error('Invalid response structure:', response.data);
+        throw new Error('Invalid response from server');
+      }
+      
+      toast.success("দোকান তৈরি সফল!", {
+        description: "আপনার দোকান তৈরি হয়েছে",
+      });
+    } catch (error: any) {
+      console.error('Shop creation error:', error);
+      console.error('Error response:', error.response?.data);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message || "দোকান তৈরি ব্যর্থ হয়েছে";
+      toast.error("দোকান তৈরি ব্যর্থ", {
+        description: errorMessage,
+      });
+      throw error;
+    }
+  }, [refreshShop]);
+
   const logout = useCallback(() => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
     setIsAuthenticated(false);
-    setHasShop(false);
-    setUserProfile(null);
+    setUser(null);
     setShop(null);
+    setCustomerShops([]);
+    setUserType(null);
+    router.push("/auth/login");
+    toast.success("লগআউট সফল");
+  }, [router]);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/api/auth/profile/");
+      setUser(response.data);
+    } catch (error) {
+      console.error("Failed to refresh user:", error);
+    }
   }, []);
-  
-  const setupShop = useCallback((name: string, phone: string, address?: string) => {
-    setShop({
-      id: "s1",
-      name,
-      phone,
-      address,
-    });
-    setHasShop(true);
+
+  const refreshCustomerShops = useCallback(async () => {
+    try {
+      const response = await axiosInstance.get("/api/auth/customer-shops/");
+      const shops = response.data.shops || response.data || [];
+      const shopsArray = Array.isArray(shops) ? shops : [];
+      console.log("Fetched customer shops:", shopsArray);
+      setCustomerShops(shopsArray);
+    } catch (error: any) {
+      console.error("Failed to fetch customer shops:", error);
+      console.error("Error response:", error.response?.data);
+      setCustomerShops([]);
+    }
   }, []);
-  
-  const switchRole = useCallback((role: UserRole) => {
-    setCurrentRole(role);
-    if (isAuthenticated && userProfile) {
-      setUserProfile({
-        ...userProfile,
-        role,
-        name: role === "dokandar" ? "রহিম স্টোর" : "আব্দুল করিম",
+
+  // Add customer
+  const addCustomer = useCallback(async (phone: string, name?: string) => {
+    try {
+      const response = await axiosInstance.post("/api/customers/create/", {
+        phone,
+        name: name || undefined,
       });
+      if (response.data.customer) {
+        await refreshCustomers();
+        toast.success("গ্রাহক যোগ হয়েছে!", {
+          description: `${name || phone} সফলভাবে যোগ হয়েছে।`,
+        });
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "গ্রাহক যোগ ব্যর্থ";
+      toast.error("গ্রাহক যোগ ব্যর্থ", {
+        description: errorMessage,
+      });
+      throw error;
     }
-  }, [isAuthenticated, userProfile]);
-  
-  // Customer actions
-  const addCustomer = useCallback((phone: string, name: string) => {
-    const newCustomer: Customer = {
-      id: `c${Date.now()}`,
-      phone,
-      name,
-      balance: 0,
-      createdAt: new Date(),
-    };
-    setCustomers(prev => [newCustomer, ...prev]);
-  }, []);
-  
-  // Baki actions
-  const addBaki = useCallback((customerId: string, amount: number, description?: string) => {
-    const customer = customers.find(c => c.id === customerId);
-    if (!customer) return;
-    
-    const newBaki: BakiEntry = {
-      id: `b${Date.now()}`,
-      customerId,
-      customerName: customer.name,
-      amount,
-      description,
-      status: "pending",
-      createdAt: new Date(),
-    };
-    setBakiEntries(prev => [newBaki, ...prev]);
-    
-    // Add notification
-    const newNotification: Notification = {
-      id: `n${Date.now()}`,
-      title: "নতুন বাকি",
-      message: `${customer.name} এর ৳${amount} বাকি যোগ হয়েছে`,
-      type: "baki",
-      read: false,
-      createdAt: new Date(),
-    };
-    setNotifications(prev => [newNotification, ...prev]);
-  }, [customers]);
-  
-  const confirmBaki = useCallback((id: string) => {
-    setBakiEntries(prev => prev.map(entry => 
-      entry.id === id 
-        ? { ...entry, status: "confirmed" as EntryStatus, confirmedAt: new Date() }
-        : entry
-    ));
-    
-    // Update customer balance
-    const entry = bakiEntries.find(e => e.id === id);
-    if (entry) {
-      setCustomers(prev => prev.map(c => 
-        c.id === entry.customerId
-          ? { ...c, balance: c.balance + entry.amount, lastTransaction: new Date() }
-          : c
-      ));
+  }, [refreshCustomers]);
+
+  // Add baki (credit entry)
+  const addBaki = useCallback(async (customerId: string, amount: number, description?: string) => {
+    try {
+      const response = await axiosInstance.post("/api/transactions/credits/create/", {
+        customerId: parseInt(customerId),
+        amount: amount.toString(),
+        description: description || undefined,
+      });
+      if (response.data.credit_entry) {
+        await refreshTransactions();
+        await refreshCustomers();
+        toast.success("বাকি যোগ হয়েছে!", {
+          description: `৳${amount} বাকি যোগ হয়েছে। গ্রাহকের নিশ্চিতকরণ পেন্ডিং।`,
+        });
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "বাকি যোগ ব্যর্থ";
+      toast.error("বাকি যোগ ব্যর্থ", {
+        description: errorMessage,
+      });
+      throw error;
     }
-  }, [bakiEntries]);
-  
-  const rejectBaki = useCallback((id: string) => {
-    setBakiEntries(prev => prev.map(entry => 
-      entry.id === id 
-        ? { ...entry, status: "rejected" as EntryStatus }
-        : entry
-    ));
-  }, []);
-  
-  // Payment actions
-  const addPayment = useCallback((customerId: string, amount: number, method: PaymentMethod) => {
-    const customer = customers.find(c => c.id === customerId);
-    if (!customer) return;
-    
-    const newPayment: PaymentEntry = {
-      id: `p${Date.now()}`,
-      customerId,
-      customerName: customer.name,
-      amount,
-      method,
-      status: "pending",
-      createdAt: new Date(),
-    };
-    setPayments(prev => [newPayment, ...prev]);
-    
-    // Add notification
-    const newNotification: Notification = {
-      id: `n${Date.now()}`,
-      title: "নতুন পেমেন্ট",
-      message: `${customer.name} এর ৳${amount} পেমেন্ট পেন্ডিং`,
-      type: "payment",
-      read: false,
-      createdAt: new Date(),
-    };
-    setNotifications(prev => [newNotification, ...prev]);
-  }, [customers]);
-  
-  const confirmPayment = useCallback((id: string) => {
-    setPayments(prev => prev.map(payment => 
-      payment.id === id 
-        ? { ...payment, status: "confirmed" as EntryStatus, confirmedAt: new Date() }
-        : payment
-    ));
-    
-    // Update customer balance
-    const payment = payments.find(p => p.id === id);
-    if (payment) {
-      setCustomers(prev => prev.map(c => 
-        c.id === payment.customerId
-          ? { ...c, balance: c.balance - payment.amount, lastTransaction: new Date() }
-          : c
-      ));
+  }, [refreshTransactions, refreshCustomers]);
+
+  // Add payment
+  const addPayment = useCallback(async (customerId: string, amount: number, method: "cash" | "bkash" | "nagad") => {
+    try {
+      const response = await axiosInstance.post("/api/transactions/payments/create/", {
+        customerId: parseInt(customerId),
+        amount: amount.toString(),
+        method,
+      });
+      if (response.data.payment_entry) {
+        await refreshTransactions();
+        await refreshCustomers();
+        toast.success("পেমেন্ট যোগ হয়েছে!", {
+          description: `৳${amount} পেমেন্ট যোগ হয়েছে। গ্রাহকের নিশ্চিতকরণ পেন্ডিং।`,
+        });
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || "পেমেন্ট যোগ ব্যর্থ";
+      toast.error("পেমেন্ট যোগ ব্যর্থ", {
+        description: errorMessage,
+      });
+      throw error;
     }
-  }, [payments]);
-  
-  const rejectPayment = useCallback((id: string) => {
-    setPayments(prev => prev.map(payment => 
-      payment.id === id 
-        ? { ...payment, status: "rejected" as EntryStatus }
-        : payment
-    ));
+  }, [refreshTransactions, refreshCustomers]);
+
+  // Demo role switcher (for UI demo purposes only)
+  const switchRole = useCallback((role: UserRole) => {
+    // This is just for demo UI - actual user type comes from backend
+    // In production, this wouldn't change the actual user type
+    setUserType(role);
   }, []);
-  
-  // Notification actions
-  const markNotificationRead = useCallback((id: string) => {
-    setNotifications(prev => prev.map(n => 
-      n.id === id ? { ...n, read: true } : n
-    ));
+
+  // Stub functions for notifications (to be implemented with backend)
+  const markNotificationRead = useCallback((id: number) => {
+    // TODO: Implement with backend API
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
   }, []);
-  
+
   const clearAllNotifications = useCallback(() => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+    // TODO: Implement with backend API
+    setNotifications([]);
   }, []);
-  
-  // Subscription
-  const subscribe = useCallback(() => {
-    setIsSubscribed(true);
-  }, []);
-  
+
   const value: AppContextType = {
     isAuthenticated,
-    hasShop,
-    userProfile,
+    user,
     shop,
+    customerShops,
+    userType,
     currentRole,
-    switchRole,
+    userProfile,
+    notifications,
+    isLoading,
     customers,
     bakiEntries,
     payments,
-    notifications,
     isSubscribed,
     trialDaysLeft,
     login,
-    signup,
+    register,
     logout,
+    refreshUser,
+    refreshShop,
+    refreshCustomerShops,
+    refreshCustomers,
+    refreshTransactions,
     setupShop,
     addCustomer,
     addBaki,
-    confirmBaki,
-    rejectBaki,
     addPayment,
-    confirmPayment,
-    rejectPayment,
+    switchRole,
     markNotificationRead,
     clearAllNotifications,
-    subscribe,
   };
-  
+
   return (
     <AppContext.Provider value={value}>
       {children}

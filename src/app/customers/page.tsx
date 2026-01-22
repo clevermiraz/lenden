@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import DashboardHeader from "@/components/shared/DashboardHeader";
 import BottomNav from "@/components/shared/BottomNav";
-import RoleSwitcher from "@/components/shared/RoleSwitcher";
 import CustomerList from "@/components/dashboard/CustomerList";
 import AddCustomerModal from "@/components/modals/AddCustomerModal";
 import { useApp } from "@/contexts/AppContext";
@@ -19,7 +18,7 @@ export default function CustomersPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredCustomers = customers.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.phone.includes(searchQuery)
   );
 
@@ -33,7 +32,6 @@ export default function CustomersPage() {
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <DashboardHeader />
-      <RoleSwitcher />
       
       <main className="container py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Header */}

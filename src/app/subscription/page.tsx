@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardHeader from "@/components/shared/DashboardHeader";
 import BottomNav from "@/components/shared/BottomNav";
-import RoleSwitcher from "@/components/shared/RoleSwitcher";
 import { useApp } from "@/contexts/AppContext";
 import { Button } from "@/components/ui/button";
 import { 
@@ -97,7 +96,7 @@ const plans: Plan[] = [
 
 export default function SubscriptionPage() {
   const router = useRouter();
-  const { isSubscribed, trialDaysLeft, subscribe } = useApp();
+  const { isSubscribed, trialDaysLeft } = useApp();
   const [isProcessing, setIsProcessing] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<PlanType | null>(null);
 
@@ -105,7 +104,8 @@ export default function SubscriptionPage() {
     setSelectedPlan(plan.id);
     setIsProcessing(true);
     await new Promise(resolve => setTimeout(resolve, 1500));
-    subscribe();
+    // Subscription functionality not yet implemented
+    // subscribe();
     toast.success("সাবস্ক্রিপশন সফল!", {
       description: `আপনি এখন ${plan.name} প্ল্যানে আছেন।`,
     });
@@ -116,7 +116,6 @@ export default function SubscriptionPage() {
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <DashboardHeader />
-      <RoleSwitcher />
       
       <main className="container py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Back button */}

@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardHeader from "@/components/shared/DashboardHeader";
 import BottomNav from "@/components/shared/BottomNav";
-import RoleSwitcher from "@/components/shared/RoleSwitcher";
 import BalanceCard from "@/components/dashboard/BalanceCard";
 import QuickActions from "@/components/dashboard/QuickActions";
 import CustomerList from "@/components/dashboard/CustomerList";
@@ -12,8 +11,10 @@ import RecentActivity from "@/components/dashboard/RecentActivity";
 import AddCustomerModal from "@/components/modals/AddCustomerModal";
 import AddBakiModal from "@/components/modals/AddBakiModal";
 import AddPaymentModal from "@/components/modals/AddPaymentModal";
+import EditShopModal from "@/components/modals/EditShopModal";
 import { useApp } from "@/contexts/AppContext";
 import { toast } from "sonner";
+import TrialBanner from "@/components/shared/TrialBanner";
 
 export default function DokandarDashboard() {
   const router = useRouter();
@@ -26,12 +27,15 @@ export default function DokandarDashboard() {
     addPayment,
     isSubscribed,
     trialDaysLeft,
+    shop,
+    refreshShop,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'customers' | 'activity'>('customers');
   const [showAddCustomer, setShowAddCustomer] = useState(false);
   const [showAddBaki, setShowAddBaki] = useState(false);
   const [showAddPayment, setShowAddPayment] = useState(false);
+  const [showEditShop, setShowEditShop] = useState(false);
 
   // Calculate totals
   const totalDue = customers.reduce((sum, c) => sum + c.balance, 0);
@@ -63,28 +67,10 @@ export default function DokandarDashboard() {
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0">
       <DashboardHeader />
-      <RoleSwitcher />
       
       <main className="container py-4 sm:py-6 space-y-4 sm:space-y-6">
         {/* Trial Banner */}
-        {!isSubscribed && (
-          <div 
-            className="p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-accent/10 border border-accent/30 cursor-pointer active:bg-accent/20 transition-colors"
-            onClick={() => router.push('/subscription')}
-          >
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="font-semibold text-sm sm:text-base text-accent-foreground">
-                  ট্রায়াল: {trialDaysLeft} দিন বাকি
-                </p>
-                <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                  সাবস্ক্রাইব করুন এবং সব সুবিধা পান
-                </p>
-              </div>
-              <span className="text-xs sm:text-sm font-medium text-accent whitespace-nowrap">সাবস্ক্রাইব →</span>
-            </div>
-          </div>
-        )}
+        {!isSubscribed && <TrialBanner trialDaysLeft={trialDaysLeft} />}
 
         {/* Balance Overview */}
         <BalanceCard 
@@ -156,6 +142,7 @@ export default function DokandarDashboard() {
         onSubmit={handleAddPayment}
         customers={customers}
       />
+
     </div>
   );
 }

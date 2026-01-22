@@ -73,7 +73,7 @@ export function formatPhone(phone: string): string {
  */
 export function getPaymentMethodLabel(method: string): string {
   const labels: Record<string, string> = {
-    cash: 'নগদ',
+    cash: 'ক্যাশ',
     bkash: 'বিকাশ',
     nagad: 'নগদ (Nagad)',
   };

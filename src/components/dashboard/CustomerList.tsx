@@ -35,18 +35,15 @@ export default function CustomerList({ customers }: CustomerListProps) {
           {/* Avatar */}
           <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
             <span className="font-display font-semibold text-sm sm:text-base text-primary">
-              {customer.name.charAt(0)}
+              {(customer.name || customer.phone || "?").charAt(0).toUpperCase()}
             </span>
           </div>
 
           {/* Info */}
           <div className="flex-1 min-w-0">
-            <h4 className="font-medium text-sm sm:text-base truncate">{customer.name}</h4>
+            <h4 className="font-medium text-sm sm:text-base truncate">{customer.name || customer.phone || "গ্রাহক"}</h4>
             <p className="text-xs sm:text-sm text-muted-foreground truncate">
               {customer.phone}
-              {customer.lastTransaction && (
-                <span className="hidden sm:inline ml-2">• {formatRelativeTime(customer.lastTransaction)}</span>
-              )}
             </p>
           </div>
 

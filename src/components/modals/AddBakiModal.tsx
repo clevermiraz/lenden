@@ -46,6 +46,11 @@ export default function AddBakiModal({ open, onOpenChange, onSubmit, customers }
     e.preventDefault();
     if (!validate()) return;
 
+    if (customers.length === 0) {
+      setErrors({ ...errors, customerId: "প্রথমে গ্রাহক যোগ করুন" });
+      return;
+    }
+    
     setIsSubmitting(true);
     await new Promise(resolve => setTimeout(resolve, 500));
     
@@ -76,18 +81,34 @@ export default function AddBakiModal({ open, onOpenChange, onSubmit, customers }
         <form onSubmit={handleSubmit} className="space-y-4 py-2 sm:py-4">
           <div className="space-y-2">
             <Label className="text-sm">গ্রাহক নির্বাচন করুন *</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
+            <Select 
+              value={customerId} 
+              onValueChange={setCustomerId}
+              disabled={customers.length === 0}
+            >
               <SelectTrigger className="h-11 sm:h-10 text-base sm:text-sm">
-                <SelectValue placeholder="গ্রাহক নির্বাচন করুন" />
+                <SelectValue placeholder={customers.length === 0 ? "কোন গ্রাহক নেই" : "গ্রাহক নির্বাচন করুন"} />
               </SelectTrigger>
               <SelectContent>
-                {customers.map((customer) => (
-                  <SelectItem key={customer.id} value={customer.id} className="text-sm">
-                    {customer.name} ({customer.phone})
-                  </SelectItem>
-                ))}
+                {customers.length === 0 ? (
+                  <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                    <p className="font-medium mb-1">কোন গ্রাহক নেই</p>
+                    <p className="text-xs">প্রথমে গ্রাহক যোগ করুন</p>
+                  </div>
+                ) : (
+                  customers.map((customer) => (
+                    <SelectItem key={customer.id} value={String(customer.id)} className="text-sm">
+                      {customer.name || customer.phone} ({customer.phone})
+                    </SelectItem>
+                  ))
+                )}
               </SelectContent>
             </Select>
+            {customers.length === 0 && (
+              <p className="text-xs sm:text-sm text-muted-foreground">
+                প্রথমে গ্রাহক যোগ করুন
+              </p>
+            )}
             {errors.customerId && <p className="text-xs sm:text-sm text-destructive">{errors.customerId}</p>}
           </div>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { useApp } from "@/contexts/AppContext";
 
 export default function SetupPage() {
   const router = useRouter();
-  const { setupShop } = useApp();
+  const { setupShop, user } = useApp();
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -20,6 +20,16 @@ export default function SetupPage() {
     phone: '',
     address: '',
   });
+
+  // Auto-fill phone number from user account
+  useEffect(() => {
+    if (user?.phone) {
+      setFormData(prev => ({
+        ...prev,
+        phone: user.phone
+      }));
+    }
+  }, [user]);
 
   const [errors, setErrors] = useState({
     shopName: '',
@@ -51,17 +61,17 @@ export default function SetupPage() {
     
     setIsSubmitting(true);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 800));
-
-    setupShop(formData.shopName, formData.phone, formData.address || undefined);
-    
-    toast.success("দোকান সেটআপ সম্পন্ন!", {
-      description: "আপনার দোকান তৈরি হয়েছে। এখন ড্যাশবোর্ডে যান।",
-    });
-    
-    router.push('/dashboard');
-    setIsSubmitting(false);
+    try {
+      await setupShop(formData.shopName, formData.phone, formData.address || undefined);
+      
+      // Success toast is shown in setupShop function
+      router.push('/dashboard');
+    } catch (error) {
+      // Error already handled in setupShop function
+      // Don't redirect on error
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
